@@ -20,7 +20,7 @@ struct mcp33131_device {
   GPIO_TypeDef* cs_port;
   uint16_t sdo_pin;
   GPIO_TypeDef* sdo_port;
-  SPI_HandleTypeDef spi_handle;
+  SPI_TypeDef * spi_handle;
   uint16_t result_bits;
   float result_uV;
   uint32_t cal_start_time;
@@ -29,7 +29,7 @@ struct mcp33131_device {
   uint16_t min_clk_cycles;
 };
 
-struct mcp33131_device init_mcp33131(uint16_t cs_pin, GPIO_TypeDef * cs_port, SPI_HandleTypeDef spi_handle, uint8_t verbose, char *name);
+struct mcp33131_device init_mcp33131(uint16_t cs_pin, GPIO_TypeDef * cs_port, SPI_TypeDef * spi_handle, uint8_t verbose, char *name);
 void calibrate_mcp33131(struct mcp33131_device *adc, uint8_t verbose);
 uint8_t check_available_mcp33131(struct mcp33131_device *adc);
 void read_mcp33131(struct mcp33131_device *adc, struct max6225_device *vref, uint8_t verbose);

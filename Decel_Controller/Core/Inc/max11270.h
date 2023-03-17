@@ -18,7 +18,7 @@ struct max11270_device {
   GPIO_TypeDef* cs_port;
   uint16_t rdy_pin;
   GPIO_TypeDef* rdy_port;
-  SPI_HandleTypeDef spi_handle;
+  SPI_TypeDef * spi_handle;
   uint32_t result_bits;
   float result_uV;
   uint16_t last_stat;
@@ -27,7 +27,7 @@ struct max11270_device {
 };
 
 struct max11270_device init_max11270(uint16_t cs_pin, GPIO_TypeDef* cs_port,
-		uint16_t rdy_pin, GPIO_TypeDef* rdy_port, uint8_t speed, SPI_HandleTypeDef spi_handle, uint8_t verbose, char *name);
+		uint16_t rdy_pin, GPIO_TypeDef* rdy_port, uint8_t speed, SPI_TypeDef * spi_handle, uint8_t verbose, char *name);
 
 //calibrate MAX11270
 void calibrate_max11270(struct max11270_device *adc, uint8_t verbose);
@@ -45,7 +45,8 @@ uint16_t stat_max11270(struct max11270_device *adc, uint8_t verbose);
 uint8_t check_available_max11270(struct max11270_device *adc);
 
 void cont_conversion(struct max11270_device *adc, uint8_t verbose, uint8_t speed);
-void setup_SPI_max11270(struct max11270_device *adc);
-void return_SPI_max11270(struct max11270_device *adc);
+
+void setupSPIMAX11270(struct max11270_device *adc);
+void returnSPIMAX11270(struct max11270_device *adc);
 
 #endif /* SRC_MAX11270_H_ */

@@ -58,9 +58,6 @@ ADC_HandleTypeDef hadc2;
 
 RTC_HandleTypeDef hrtc;
 
-SPI_HandleTypeDef hspi1;
-SPI_HandleTypeDef hspi2;
-
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
@@ -78,8 +75,6 @@ static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_RTC_Init(void);
-static void MX_SPI1_Init(void);
-static void MX_SPI2_Init(void);
 static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -122,15 +117,13 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_RTC_Init();
-  MX_SPI1_Init();
-  MX_SPI2_Init();
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-	led_twinkle(30); //allows voltage to settle before attempting calibration
-
-	led_twinkle(30); //allows voltage to settle before attempting calibration
+	SPIConfig();
+	SPI_Enable(SPI1);
+	SPI_Enable(SPI2);
 
 	led_twinkle(30); //allows voltage to settle before attempting calibration
 
@@ -139,7 +132,7 @@ int main(void)
 	DWT->CYCCNT = 0;
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
-	uint8_t verbose = 2; 	// levels 0, 1, 2 - produces increasingly descriptive serial output
+	uint8_t verbose = 0; 	// levels 0, 1, 2 - produces increasingly descriptive serial output
 
 	new_usb_data = 0;
 	new_uart_data = 0;
@@ -154,22 +147,22 @@ int main(void)
 
 	struct max11270_device adc_slow_hv1_fb =
 		  init_max11270(CS_ADC_SLOW_HV1_FB_Pin, CS_ADC_SLOW_HV1_FB_GPIO_Port,
-				  RDY_ADC_SLOW_HV1_FB_Pin, RDY_ADC_SLOW_HV1_FB_GPIO_Port, 0, hspi2, verbose, "Vfb_slow_ADC");
+				  RDY_ADC_SLOW_HV1_FB_Pin, RDY_ADC_SLOW_HV1_FB_GPIO_Port, 0, SPI2, verbose, "Vfb_slow_ADC");
 
 	struct mcp33131_device adc_fast_hv1_fb =
-		  init_mcp33131(CS_ADC_FAST_HV1_FB_Pin, CS_ADC_FAST_HV1_FB_GPIO_Port, hspi2, verbose, "Vfb_ADC");
+		  init_mcp33131(CS_ADC_FAST_HV1_FB_Pin, CS_ADC_FAST_HV1_FB_GPIO_Port, SPI2, verbose, "Vfb_ADC");
 	struct mcp33131_device adc_hv1_fg =
-		  init_mcp33131(CS_ADC_HV1_FG_Pin, CS_ADC_HV1_FG_GPIO_Port, hspi2, verbose, "Vfg_ADC");
+		  init_mcp33131(CS_ADC_HV1_FG_Pin, CS_ADC_HV1_FG_GPIO_Port, SPI2, verbose, "Vfg_ADC");
 	struct mcp33131_device adc_temp_dac_hv1_ctrl =
-		  init_mcp33131(CS_ADC_TEMP_DAC_HV1_CTRL_Pin, CS_ADC_TEMP_DAC_HV1_CTRL_GPIO_Port, hspi2, verbose, "DAC_temp_ADC");
+		  init_mcp33131(CS_ADC_TEMP_DAC_HV1_CTRL_Pin, CS_ADC_TEMP_DAC_HV1_CTRL_GPIO_Port, SPI2, verbose, "DAC_temp_ADC");
 	struct mcp33131_device adc_hv1_electrode_current =
-		  init_mcp33131(CS_ADC_HV1_ELECTRODE_CURRENT_Pin, CS_ADC_HV1_ELECTRODE_CURRENT_GPIO_Port, hspi2, verbose, "current_ADC");
+		  init_mcp33131(CS_ADC_HV1_ELECTRODE_CURRENT_Pin, CS_ADC_HV1_ELECTRODE_CURRENT_GPIO_Port, SPI2, verbose, "current_ADC");
 
 	struct ad5763_device dac_hv1 =
-		  init_ad5763(SYNC_DAC_HV1_CTRL_Pin, SYNC_DAC_HV1_CTRL_GPIO_Port, hspi1,
+		  init_ad5763(SYNC_DAC_HV1_CTRL_Pin, SYNC_DAC_HV1_CTRL_GPIO_Port, SPI1,
 				  HV1_COARSE_OFFSET, HV1_COARSE_GAIN, HV1_FINE_OFFSET, HV1_FINE_GAIN, verbose, "DAC_HV", "coarse", "fine");
 	struct ad5763_device dac_ultravolt =
-		  init_ad5763(SYNC_DAC_ULTRAVOLT_CTRL_Pin, SYNC_DAC_ULTRAVOLT_CTRL_GPIO_Port, hspi1,
+		  init_ad5763(SYNC_DAC_ULTRAVOLT_CTRL_Pin, SYNC_DAC_ULTRAVOLT_CTRL_GPIO_Port, SPI1,
 				  UVA_OFFSET, UVA_GAIN, UVB_OFFSET, UVB_GAIN, verbose, "DAC_UV", "A", "B");
 
 	struct max6225_device vref = init_max6225(verbose);
@@ -256,13 +249,13 @@ int main(void)
 			updateDecelReadingFast(&decel_board, &adc_fast_hv1_fb, verbose);
 		}
 
-		// updates DAC values
+		// updates DAC values, should check if necesarry first though
 		if (decel_board.hv_enable == 1)
 		{
-			set_stage_uV(dac_hv1, 1, 0, 1); // sets dac_coarse to 1V
-			set_stage_uV(dac_hv1, 2, 0, 1); // sets dac_fine to 1V
-			set_stage_uV(dac_ultravolt, 1, 0, 1); // sets ultravolt A input to 0V
-			set_stage_uV(dac_ultravolt, 2, 0, 1); // sets ultravolt B input to 0V
+			set_stage_uV(&dac_hv1, 1, 0, 1); 		// sets dac_coarse to 1V
+			set_stage_uV(&dac_hv1, 2, 0, 1); 		// sets dac_fine to 1V
+			set_stage_uV(&dac_ultravolt, 1, 0, 1); 	// sets ultravolt A input to 0V
+			set_stage_uV(&dac_ultravolt, 2, 0, 1); 	// sets ultravolt B input to 0V
 		}
 
 		// heartbeat
@@ -489,82 +482,6 @@ static void MX_RTC_Init(void)
 }
 
 /**
-  * @brief SPI1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI1_Init(void)
-{
-
-  /* USER CODE BEGIN SPI1_Init 0 */
-
-  /* USER CODE END SPI1_Init 0 */
-
-  /* USER CODE BEGIN SPI1_Init 1 */
-
-  /* USER CODE END SPI1_Init 1 */
-  /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI1_Init 2 */
-
-  /* USER CODE END SPI1_Init 2 */
-
-}
-
-/**
-  * @brief SPI2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI2_Init(void)
-{
-
-  /* USER CODE BEGIN SPI2_Init 0 */
-
-  /* USER CODE END SPI2_Init 0 */
-
-  /* USER CODE BEGIN SPI2_Init 1 */
-
-  /* USER CODE END SPI2_Init 1 */
-  /* SPI2 parameter configuration*/
-  hspi2.Instance = SPI2;
-  hspi2.Init.Mode = SPI_MODE_MASTER;
-  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi2.Init.CLKPolarity = SPI_POLARITY_HIGH;
-  hspi2.Init.CLKPhase = SPI_PHASE_2EDGE;
-  hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi2.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI2_Init 2 */
-
-  /* USER CODE END SPI2_Init 2 */
-
-}
-
-/**
   * @brief USART3 Initialization Function
   * @param None
   * @retval None
@@ -634,10 +551,15 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(SYNC_DAC_HV1_CTRL_GPIO_Port, SYNC_DAC_HV1_CTRL_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : CS_ADC_HV1_ELECTRODE_CURRENT_Pin GAIN_B_Pin GAIN_A_Pin CS_ADC_HV1_FG_Pin
-                           LED_3_Pin HV_ENABLE_RETURN_Pin */
-  GPIO_InitStruct.Pin = CS_ADC_HV1_ELECTRODE_CURRENT_Pin|GAIN_B_Pin|GAIN_A_Pin|CS_ADC_HV1_FG_Pin
-                          |LED_3_Pin|HV_ENABLE_RETURN_Pin;
+  /*Configure GPIO pins : CS_ADC_HV1_ELECTRODE_CURRENT_Pin CS_ADC_HV1_FG_Pin */
+  GPIO_InitStruct.Pin = CS_ADC_HV1_ELECTRODE_CURRENT_Pin|CS_ADC_HV1_FG_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : GAIN_B_Pin GAIN_A_Pin LED_3_Pin HV_ENABLE_RETURN_Pin */
+  GPIO_InitStruct.Pin = GAIN_B_Pin|GAIN_A_Pin|LED_3_Pin|HV_ENABLE_RETURN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -649,17 +571,29 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(RDY_ADC_SLOW_HV1_FB_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : CS_DISPLAY_Pin CS_ADC_SLOW_HV1_FB_Pin SYNC_DAC_HV1_CTRL_Pin */
-  GPIO_InitStruct.Pin = CS_DISPLAY_Pin|CS_ADC_SLOW_HV1_FB_Pin|SYNC_DAC_HV1_CTRL_Pin;
+  /*Configure GPIO pin : CS_DISPLAY_Pin */
+  GPIO_InitStruct.Pin = CS_DISPLAY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(CS_DISPLAY_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : CS_ADC_SLOW_HV1_FB_Pin SYNC_DAC_HV1_CTRL_Pin */
+  GPIO_InitStruct.Pin = CS_ADC_SLOW_HV1_FB_Pin|SYNC_DAC_HV1_CTRL_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : CS_ADC_FAST_HV1_FB_Pin CS_TC_RES_STACK_Pin LED_1_Pin LED_2_Pin
-                           HV_ENABLE_SOFTWARE_Pin SYNC_DAC_ULTRAVOLT_CTRL_Pin */
-  GPIO_InitStruct.Pin = CS_ADC_FAST_HV1_FB_Pin|CS_TC_RES_STACK_Pin|LED_1_Pin|LED_2_Pin
-                          |HV_ENABLE_SOFTWARE_Pin|SYNC_DAC_ULTRAVOLT_CTRL_Pin;
+  /*Configure GPIO pins : CS_ADC_FAST_HV1_FB_Pin CS_TC_RES_STACK_Pin */
+  GPIO_InitStruct.Pin = CS_ADC_FAST_HV1_FB_Pin|CS_TC_RES_STACK_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LED_1_Pin LED_2_Pin HV_ENABLE_SOFTWARE_Pin SYNC_DAC_ULTRAVOLT_CTRL_Pin */
+  GPIO_InitStruct.Pin = LED_1_Pin|LED_2_Pin|HV_ENABLE_SOFTWARE_Pin|SYNC_DAC_ULTRAVOLT_CTRL_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -669,7 +603,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = CS_ADC_TEMP_DAC_HV1_CTRL_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(CS_ADC_TEMP_DAC_HV1_CTRL_GPIO_Port, &GPIO_InitStruct);
 
 }

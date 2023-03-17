@@ -8,6 +8,7 @@
 #include "max11270.h"
 #include "main.h"
 #include "misc_funcs.h"
+#include "spi_bare.h"
 
 //max11270 stuff
 const uint8_t MAX11270_REG_WRITE = 0b11000000;
@@ -19,7 +20,7 @@ const uint8_t MAX11270_CMD = 0b10000000;
 const uint8_t MAX11270_CAL = 0b10100000;
 
 struct max11270_device init_max11270(uint16_t cs_pin, GPIO_TypeDef* cs_port,
-		uint16_t rdy_pin, GPIO_TypeDef* rdy_port, uint8_t speed, SPI_HandleTypeDef spi_handle, uint8_t verbose, char *name)
+		uint16_t rdy_pin, GPIO_TypeDef* rdy_port, uint8_t speed, SPI_TypeDef * spi_handle, uint8_t verbose, char *name)
 {
     struct max11270_device adc;
 	strcpy(adc.name, "MAX11270-");
@@ -70,12 +71,15 @@ void calibrate_max11270(struct max11270_device *adc, uint8_t verbose)
 		print("Calibrating ");
 		println(adc->name);
 	}
-	setup_SPI_max11270(adc);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&adc->spi_handle, (uint8_t *)&MAX11270_CAL, 1, 100);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
 
-	return_SPI_max11270(adc);
+	setupSPIMAX11270(adc);
+
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 					// set CS LOW
+	SPI_Transmit((uint8_t *)&MAX11270_CAL, 1, adc->spi_handle);		// transmit 1 byte to request calibration
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 					// reset CS HIGH
+
+	returnSPIMAX11270(adc);
 
 	HAL_Delay (200);   /* Insert delay 200 ms */
 	if (verbose > 0)
@@ -88,22 +92,28 @@ void calibrate_max11270(struct max11270_device *adc, uint8_t verbose)
 //read from MAX11270
 void read_max11270(struct max11270_device *adc, struct max6225_device *vref, uint8_t verbose)
 {
-	uint8_t ADC_buffer[3] = {0,0,0};
 	if (verbose > 1)
 	{
 		print("Reading sample from ");
 		println(adc->name);
 	}
-	setup_SPI_max11270(adc);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&adc->spi_handle, (uint8_t *)&MAX11270_READ_DATA, 1, 100);
-	HAL_SPI_Receive(&adc->spi_handle, ADC_buffer, 3, 100);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+
+	uint8_t ADC_buffer[3] = {0,0,0};
+
+	setupSPIMAX11270(adc);
+
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	SPI_Transmit((uint8_t *)&MAX11270_READ_DATA, 1, adc->spi_handle);	// transmit 1 byte to request data read
+	SPI_Receive (ADC_buffer, 3, adc->spi_handle);						// receive 3 bytes of data
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+
+	returnSPIMAX11270(adc);
+
+	// Reassemble bytes into a 24-bit value, then convert to a voltage reading
 	uint32_t sample = ((uint32_t)ADC_buffer[0] << 16) | ((uint32_t)ADC_buffer[1] << 8) | ((uint32_t)ADC_buffer[2]);
 	adc->result_bits = sample;
 	adc->result_uV = max11270_bits_to_uV(adc->result_bits, *vref);
-
-	return_SPI_max11270(adc);
 
 	if (verbose > 1)
 	{
@@ -123,26 +133,34 @@ void setup_max11270(struct max11270_device *adc, uint8_t verbose)
 		print("Setting up ");
 		println(adc->name);
 	}
-	setup_SPI_max11270(adc);
 
-	// write CTRL1 register, continuous mode, unipolar reference, internal clock
+	setupSPIMAX11270(adc);
+
+	// Prep write for CTRL1 register: continuous mode, unipolar reference, internal clock
 	uint8_t tx_data[2] = {0,0};
 	tx_data[0] = MAX11270_REG_CTRL1_WRITE;
-	tx_data[1] = 0b00001101;
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&adc->spi_handle, tx_data, 2, 100);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+	tx_data[1] = 0b00001101;											// desired contents of CTRL1 reg
 
-	// readback CTRL1 register, check correct
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	SPI_Transmit(tx_data, 2, adc->spi_handle);							// transmit 2 bytes to write CTRL1 reg
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+
+	// Prep readback from CTRL1 register, to check if correct
 	uint8_t CTRL1_reg[1] = {0};
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&adc->spi_handle, (uint8_t *)&MAX11270_REG_CTRL1_READ, 1, 100);
-	HAL_SPI_Receive(&adc->spi_handle, CTRL1_reg, 1, 100);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 							// set CS LOW
+	SPI_Transmit((uint8_t *)&MAX11270_REG_CTRL1_READ, 1, adc->spi_handle);	// transmit 1 byte to request ctrl1 read
+	SPI_Receive (CTRL1_reg, 1, adc->spi_handle);							// receive 1 byte of data
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 							// reset CS HIGH
+
+	returnSPIMAX11270(adc);
+
+	// Check if readback matched attempted input
 	uint8_t readback = (uint8_t)CTRL1_reg[0];
 	if (readback != tx_data[1]) adc->fault = 1;
 
-	return_SPI_max11270(adc);
 
 	if (verbose > 0)
 	{
@@ -156,28 +174,33 @@ void setup_max11270(struct max11270_device *adc, uint8_t verbose)
 	}
 }
 
+// Converts a 24-bit value into a voltage, manually calibrated
 float max11270_bits_to_uV(uint32_t bits, struct max6225_device vref)
 {
 	float uV = ((float)bits * (vref.output / 15764879.0));
 	return uV;
 }
 
-//readback stat register
+// Readback stat register, check for faults
 uint16_t stat_max11270(struct max11270_device *adc, uint8_t verbose)
 {
+	setupSPIMAX11270(adc);
 
-	setup_SPI_max11270(adc);
+	// Prep readback from STAT register, to check for faults
 	uint8_t STAT_reg[2] = {0, 0};
 
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&adc->spi_handle, (uint8_t *)&MAX11270_REG_READ, 1, 100);
-	HAL_SPI_Receive(&adc->spi_handle, STAT_reg, 2, 100);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	SPI_Transmit((uint8_t *)&MAX11270_REG_READ, 1, adc->spi_handle);	// transmit 1 byte to request data read
+	SPI_Receive (STAT_reg, 2, adc->spi_handle);							// receive 2 bytes of data
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+
+	returnSPIMAX11270(adc);
+
+	// Reassemble bytes into full 16 bit register value, then check for faults
 	uint16_t val = ((uint16_t)STAT_reg[0] << 8) | ((uint16_t)STAT_reg[1]);
 	if ((val & 0B1111001100001100) == 0B0011000000000000) adc->fault = 0;
 	else adc->fault = 1;
-
-	return_SPI_max11270(adc);
 
 	if (verbose == 1)
 	{
@@ -196,7 +219,7 @@ uint16_t stat_max11270(struct max11270_device *adc, uint8_t verbose)
 
 uint8_t check_available_max11270(struct max11270_device *adc)
 {
-	return !HAL_GPIO_ReadPin(adc->rdy_port, adc->rdy_pin); //note inverted!
+	return !((adc->rdy_port->IDR) &(1<<adc->rdy_pin));
 }
 
 
@@ -208,14 +231,16 @@ void cont_conversion(struct max11270_device *adc, uint8_t verbose, uint8_t speed
 		adc->speed = (speed & 0x0F);
 	}
 
-	setup_SPI_max11270(adc);
+	setupSPIMAX11270(adc);
 
-	uint8_t value[1] = {(0B10000000 | (adc->speed & 0B00001111))};
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&adc->spi_handle, value, 1, 100);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+	uint8_t value[1] = {(0B10000000 | (adc->speed & 15))};
 
-	return_SPI_max11270(adc);
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	SPI_Transmit(value, 1, adc->spi_handle);							// transmit 1 byte to start conversions
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+
+	returnSPIMAX11270(adc);
 
 	if (verbose > 0)
 	{
@@ -226,25 +251,18 @@ void cont_conversion(struct max11270_device *adc, uint8_t verbose, uint8_t speed
 	}
 }
 
-void setup_SPI_max11270(struct max11270_device *adc)
+void setupSPIMAX11270(struct max11270_device *adc)
 {
-	adc->spi_handle.Init.CLKPolarity = SPI_POLARITY_LOW;
-	adc->spi_handle.Init.CLKPhase = SPI_PHASE_1EDGE;
-	adc->spi_handle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
-	if (HAL_SPI_Init(&adc->spi_handle) != HAL_OK)
-	{
-		Error_Handler();
-	}
+	// Setup SPI for this device, ie slow and Mode 0
+	adc->spi_handle->CR1 |= (0<<0)|(0<<1);							// set SPI Mode to 0
+	if (adc->spi_handle == SPI1) adc->spi_handle->CR1 |= (4<<3);	// slow clock down
+	if (adc->spi_handle == SPI2) adc->spi_handle->CR1 |= (3<<3);
 }
 
-void return_SPI_max11270(struct max11270_device *adc)
+void returnSPIMAX11270(struct max11270_device *adc)
 {
-	adc->spi_handle.Init.CLKPolarity = SPI_POLARITY_HIGH;
-	adc->spi_handle.Init.CLKPhase = SPI_PHASE_2EDGE;
-	adc->spi_handle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-	if (HAL_SPI_Init(&adc->spi_handle) != HAL_OK)
-	{
-		Error_Handler();
-	}
+	// Return SPI to fast and mode 3
+	adc->spi_handle->CR1 |= (1<<0)|(1<<1);							// return SPI Mode to 3
+	if (adc->spi_handle == SPI1) adc->spi_handle->CR1 |= (0<<3); 	// return SPI clock to fast
+	if (adc->spi_handle == SPI2) adc->spi_handle->CR1 |= (0<<3);
 }
-

@@ -9,8 +9,9 @@
 #include "main.h"
 #include "misc_funcs.h"
 #include "max6225.h"
+#include "spi_bare.h"
 
-struct mcp33131_device init_mcp33131(uint16_t cs_pin, GPIO_TypeDef * cs_port, SPI_HandleTypeDef spi_handle, uint8_t verbose, char *name)
+struct mcp33131_device init_mcp33131(uint16_t cs_pin, GPIO_TypeDef * cs_port, SPI_TypeDef * spi_handle, uint8_t verbose, char *name)
 {
 	struct mcp33131_device adc;
 	strcpy(adc.name, "MCP33131-");
@@ -46,13 +47,15 @@ void calibrate_mcp33131(struct mcp33131_device *adc, uint8_t verbose)
 		print("Calibrating ");
 		println(adc->name);
 	}
+
+	// Calibration inititiated by 1024 cycles ie 128 bytes worth
 	uint8_t buffer[128] = {[0 ... 127] = 0xFF};
 
-	//clock needs to complete 1024 cycles ie 128 bytes of cycles.
-	//so send 128 bytes of 0xFF
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit (&adc->spi_handle,buffer, 128, 10);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 				// set CS LOW
+	SPI_Transmit(buffer, 128, adc->spi_handle);					// transmit 128 dummy bytes to start calibration
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 				// reset CS HIGH
+
 	// calibration can now take up to 650ms, so device should not be read until complete
 	adc->cal_start_time = HAL_GetTick();
 	adc->cal_active = 1;
@@ -83,13 +86,15 @@ void read_mcp33131(struct mcp33131_device *adc, struct max6225_device *vref, uin
 		print(adc->name);
 	}
 
-	// this may need fixing in future.. 3 bytes must be received, because the first two only
-	// contain the first 15 bits of the result, not the 16th bit. Weird fix but oh well for now.
-	// receive sample, keeping MOSI high as required
+	// this does seem a bit buggy, and sometimes only gets 15 bits...
 	uint8_t buffer[2] = {0,0};
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_RESET);
-	HAL_SPI_Receive(&adc->spi_handle, buffer, 2, 10);
-	HAL_GPIO_WritePin(adc->cs_port, adc->cs_pin, GPIO_PIN_SET);
+
+
+	// Inititate SPI transfer
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 				// set CS LOW
+	SPI_Receive(buffer, 2, adc->spi_handle);					// receive 2 bytes
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 				// reset CS HIGH
+
 	adc->last_clock = DWT->CYCCNT;
 	adc->result_bits = ((uint16_t)buffer[0] << 8 ) | ((uint16_t) buffer[1]);
 	adc->result_uV = mcp33131_bits_to_uV(adc->result_bits, *vref);

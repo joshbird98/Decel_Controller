@@ -79,12 +79,6 @@ void Error_Handler(void);
 #define UART_RX_GPIO_Port GPIOB
 #define CS_ADC_SLOW_HV1_FB_Pin GPIO_PIN_12
 #define CS_ADC_SLOW_HV1_FB_GPIO_Port GPIOB
-#define SPI0_SCLK_Pin GPIO_PIN_13
-#define SPI0_SCLK_GPIO_Port GPIOB
-#define SPI0_MISO_Pin GPIO_PIN_14
-#define SPI0_MISO_GPIO_Port GPIOB
-#define SPI0_MOSI_Pin GPIO_PIN_15
-#define SPI0_MOSI_GPIO_Port GPIOB
 #define CS_ADC_FAST_HV1_FB_Pin GPIO_PIN_6
 #define CS_ADC_FAST_HV1_FB_GPIO_Port GPIOC
 #define CS_TC_RES_STACK_Pin GPIO_PIN_7

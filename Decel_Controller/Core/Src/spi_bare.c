@@ -4,12 +4,108 @@
  *  Created on: March 17, 2023
  *      Author: Josh
  *
- *  Both SPI1 and SPI2 must be controlled, therefore each function must be passed this
+ *  Library allows setup and use of SPI1 and SPI2, with limited options
+ *  Usage:
+	SPIConfig();
+	SPI_Enable();
+	cs enable
+	SPI_Receive() or SPI_Transfer()
+	cs_disable
  */
-
 
 #include "spi_bare.h"
 #include "main.h"
+
+/************** STEPS TO FOLLOW *****************
+1. Enable SPI clock
+2. Configure the Control Register 1
+3. Configure the CR2
+************************************************/
+void SPIConfig(void)
+{
+	GPIOConfigSPI(); 				// Setup GPIO
+	RCC->APB2ENR |= (1<<12);  		// Enable SPI1 CLock, max 84MHz
+	RCC->APB1ENR |= (1<<14);  		// Enable SPI2 Clock, max 42MHz
+
+	SPI1->CR1 |= (1<<2);  			// Set SPI to Master Mode
+	SPI1->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
+	SPI1->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
+	SPI1->CR1 &= ~(1<<10);  		// RXONLY = 0, full-duplex
+	SPI1->CR1 &= ~(1<<11);  		// DFF=0, 8 bit data
+	SPI1->CR2 = 0;					// CR2 is used during SPI operation
+
+	SPI2->CR1 |= (1<<2);  			// Set SPI to Master Mode
+	SPI2->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
+	SPI2->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
+	SPI2->CR1 &= ~(1<<10);  		// RXONLY = 0, full-duplex
+	SPI2->CR1 &= ~(1<<11);  		// DFF=0, 8 bit data
+	SPI2->CR2 = 0;					// CR2 is used during SPI operation
+
+	SPIMode(SPI1, 3);				// Default to Mode 3
+	SPISpeed(SPI1, 50000000);		// Default to 50MHz
+	SPIMode(SPI2, 3);				// Default to Mode 3
+	SPISpeed(SPI2, 50000000);		// Default to 50MHz
+}
+
+// Ensures GPIO pins PB3..5 are set up for SPI1 and PB13..15 for SPI2
+void GPIOConfigSPI(void)
+{
+	RCC->AHB1ENR |= (1<<0);  					// Enable GPIO Clock
+
+	// Setting up pins for SPI1 on PB3..5
+	GPIOB->OSPEEDR |= (3<<6)|(3<<8)|(3<<10);  	// Very High Speed for PB3, PB4, PB5
+	GPIOB->MODER |= (2<<6)|(2<<8)|(2<<10);  	// Alternate function mode for PB3, PB4, PB5
+	GPIOB->AFR[0] |= (5<<12)|(5<<16)|(5<<20); 	// AF5 (SPI1) for PB3, PB4, PB5
+
+	// Setting up pins for SPI2 on PB13..15
+	GPIOB->OSPEEDR |= (3<<26)|(3<<28)|(3<<30);  // Very High Speed for PB13, PB14, PB15
+	GPIOB->MODER |= (2<<26)|(2<<28)|(2<<30);  	// Alternate function mode for PB13, PB14, PB15
+	GPIOB->AFR[1] |= (5<<20)|(5<<24)|(5<<28); 	// AF5 (SPI2) for PB13, PB14, PB15
+}
+
+// Determines and set CPHA and CPOL for mode (0,1,2 or 3)
+void SPIMode(SPI_TypeDef *spi, uint8_t mode)
+{
+	mode &= 0x3;
+	if (mode == 0)      spi->CR1 |= (0<<0)|(0<<1);
+	else if (mode == 1) spi->CR1 |= (0<<0)|(1<<1);
+	else if (mode == 2) spi->CR1 |= (1<<0)|(0<<1);
+	else if (mode == 3) spi->CR1 |= (1<<0)|(1<<1);
+}
+
+// Determines and set optimal baud rate divider to attain SCLK speed up to max_freq
+void SPISpeed(SPI_TypeDef *spi, uint32_t max_freq)
+{
+	uint32_t clk = 0;
+	if (spi == SPI1) clk = SystemCoreClock >> APBPrescTable[(RCC->CFGR & RCC_CFGR_PPRE1)>> RCC_CFGR_PPRE1_Pos];
+	if (spi == SPI2) clk = SystemCoreClock >> APBPrescTable[(RCC->CFGR & RCC_CFGR_PPRE2)>> RCC_CFGR_PPRE2_Pos];
+
+	// available SPI speeds are clk/2, clk/4, clk/8 etc...
+	uint8_t br_div = 0;
+	while (((clk << (br_div + 1)) > max_freq) && (br_div < 8))
+	{
+		br_div += 1;
+	}
+	SPIBRDiv(spi, br_div);
+}
+
+// For SPI1, SPI clk = 84MHz / (2 ^ (br_div + 1)
+// For SPI2, SPI clk = 42MHz / (2 ^ (br_div + 1)
+
+void SPIBRDiv(SPI_TypeDef *spi, uint8_t br_div)
+{
+	spi->CR1 |= ((br_div & 0x07) << 3);
+}
+
+void SPI_Enable (SPI_TypeDef *spi)
+{
+	spi->CR1 |= (1<<6);   // SPE=1, Peripheral enabled
+}
+
+void SPI_Disable (SPI_TypeDef *spi)
+{
+	spi->CR1 &= ~(1<<6);   // SPE=0, Peripheral disabled
+}
 
 //SPI_TypeDef *spi should be either SPI1 or SPI2
 void SPI_Receive (uint8_t *data, int size, SPI_TypeDef *spi)
@@ -29,7 +125,6 @@ void SPI_Receive (uint8_t *data, int size, SPI_TypeDef *spi)
 	    *data++ = (spi->DR);
 		size--;
 	}
-
 }
 
 void SPI_Transmit (uint8_t *data, int size, SPI_TypeDef *spi)
@@ -62,93 +157,14 @@ void SPI_Transmit (uint8_t *data, int size, SPI_TypeDef *spi)
 	//  Clear the Overrun flag by reading DR and SR
 	uint8_t temp = spi->DR;
 	temp = spi->SR;
-
+	temp = temp; //shuts the compiler up
 }
 
-/************** STEPS TO FOLLOW *****************
-1. Enable SPI clock
-2. Configure the Control Register 1
-3. Configure the CR2
-************************************************/
-void SPIConfig (SPI_TypeDef *spi, uint8_t mode, uint32_t max_freq)
-{
-	if (spi == SPI1) RCC->APB2ENR |= (1<<12);  // Enable SPI1 CLock, max 84MHz
-	if (spi == SPI2) RCC->APB1ENR |= (1<<14);  // Enable SPI2 Clock, max 42MHz
-
-	SPIMode(spi, mode);		    	// determine CPHA and CPOL
-	SPISpeed(spi, max_freq); 		// determine optimal baud rate divider to attain SCLK speed up to max_freq
-
-	spi->CR1 |= (1<<2);  			// Master Mode
-	spi->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
-	spi->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
-	spi->CR1 &= ~(1<<10);  			// RXONLY = 0, full-duplex
-	spi->CR1 &= ~(1<<11);  			// DFF=0, 8 bit data
-	spi->CR2 = 0;
-}
-
-// sets the CPOL and CPHA values
-void SPIMode(SPI_TypeDef *spi, uint8_t mode)
-{
-	mode &= 0x3;
-	if (mode == 0)      spi->CR1 |= (0<<0)|(0<<1);
-	else if (mode == 1) spi->CR1 |= (0<<0)|(1<<1);
-	else if (mode == 2) spi->CR1 |= (1<<0)|(0<<1);
-	else if (mode == 3) spi->CR1 |= (1<<0)|(1<<1);
-}
-
-// finds the settings that will produce the highest SCLK freq <= max_freq
-// slow because involves HAL call to find
-void SPISpeed(spi, max_freq)
-{
-	uint32_t clk = 0;
-	if (spi == SPI1) clk = SystemCoreClock >> APBPrescTable[(RCC->CFGR & RCC_CFGR_PPRE1)>> RCC_CFGR_PPRE1_Pos];
-	if (spi == SPI2) clk = SystemCoreClock >> APBPrescTable[(RCC->CFGR & RCC_CFGR_PPRE2)>> RCC_CFGR_PPRE2_Pos];
-
-	// available SPI speeds are clk/2, clk/4, clk/8 etc...
-	uint8_t br_div = 0;
-	while (((clk << (br_div + 1)) > max_freq) && (br_div < 8))
-	{
-		br_div += 1;
-	}
-	SPIBRDiv(spi, br_div);
-}
-
-// For SPI1, SPI clk = 84MHz / (2 ^ (br_div + 1)
-// For SPI2, SPI clk = 42MHz / (2 ^ (br_div + 1)
-void SPIBRDiv(SPI_TypeDef *spi, uint8_t br_div)
-{
-	spi->CR1 |= ((br_div & 0x07) << 3);
-}
+// quickest way to control outputs... (ie fast CS changes)
+// setup as output and very-high speed, then change single register bit
+//	 GPIOx->OSPEEDR |= (3<<y)
+//	 GPIOx->MODER |= (1<<y)
+//   GPIOx->BSRR |= (1<<g)<<16 to set to LOW
+//   GPIOx->BSRR |= (1<<g) to reset to HIGH
 
 
-void SPI_Enable (SPI_TypeDef *spi)
-{
-	spi->CR1 |= (1<<6);   // SPE=1, Peripheral enabled
-}
-
-void SPI_Disable (SPI_TypeDef *spi)
-{
-	spi->CR1 &= ~(1<<6);   // SPE=0, Peripheral Disabled
-}
-
-void CS_Enable (void)
-{
-	GPIOA->BSRR |= (1<<9)<<16;
-}
-
-void CS_Disable (void)
-{
-	GPIOA->BSRR |= (1<<9);
-}
-
-
-void GPIOConfig (void)
-{
-	RCC->AHB1ENR |= (1<<0);  // Enable GPIO Clock
-
-	GPIOA->MODER |= (2<<10)|(2<<12)|(2<<14)|(1<<18);  // Alternate functions for PA5, PA6, PA7 and Output for PA9
-
-	GPIOA->OSPEEDR |= (3<<10)|(3<<12)|(3<<14)|(3<<18);  // HIGH Speed for PA5, PA6, PA7, PA9
-
-	GPIOA->AFR[0] |= (5<<20)|(5<<24)|(5<<28);   // AF5(SPI1) for PA5, PA6, PA7
-}
