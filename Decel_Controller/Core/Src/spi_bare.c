@@ -1,5 +1,5 @@
 /*
- * spi_bare.c , see https://controllerstech.com/spi-using-registers-in-stm32/
+ * spi_bare.c , see https://controllerstech.com/spi-using-registers-in-stm32/ and RM0090 Reference manual
  *
  *  Created on: March 17, 2023
  *      Author: Josh
