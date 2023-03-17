@@ -139,7 +139,7 @@ int main(void)
 	DWT->CYCCNT = 0;
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
-	uint8_t verbose = 0; 	// levels 0, 1, 2 - produces increasingly descriptive serial output
+	uint8_t verbose = 2; 	// levels 0, 1, 2 - produces increasingly descriptive serial output
 
 	new_usb_data = 0;
 	new_uart_data = 0;
