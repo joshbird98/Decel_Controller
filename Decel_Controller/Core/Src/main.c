@@ -125,7 +125,7 @@ int main(void)
 	SPI_Enable(SPI1);
 	SPI_Enable(SPI2);
 
-	led_twinkle(30); //allows voltage to settle before attempting calibration
+	led_twinkle(80); //allows voltage to settle before attempting calibration
 
 	// allows access to clock cycles
 	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
@@ -150,7 +150,7 @@ int main(void)
 				  RDY_ADC_SLOW_HV1_FB_Pin, RDY_ADC_SLOW_HV1_FB_GPIO_Port, 0, SPI2, verbose, "Vfb_slow_ADC");
 
 	struct mcp33131_device adc_fast_hv1_fb =
-		  init_mcp33131(CS_ADC_FAST_HV1_FB_Pin, CS_ADC_FAST_HV1_FB_GPIO_Port, SPI2, verbose, "Vfb_ADC");
+		  init_mcp33131(CS_ADC_FAST_HV1_FB_Pin, CS_ADC_FAST_HV1_FB_GPIO_Port, SPI2, verbose, "Vfb_ADC");/*
 	struct mcp33131_device adc_hv1_fg =
 		  init_mcp33131(CS_ADC_HV1_FG_Pin, CS_ADC_HV1_FG_GPIO_Port, SPI2, verbose, "Vfg_ADC");
 	struct mcp33131_device adc_temp_dac_hv1_ctrl =
@@ -163,7 +163,7 @@ int main(void)
 				  HV1_COARSE_OFFSET, HV1_COARSE_GAIN, HV1_FINE_OFFSET, HV1_FINE_GAIN, verbose, "DAC_HV", "coarse", "fine");
 	struct ad5763_device dac_ultravolt =
 		  init_ad5763(SYNC_DAC_ULTRAVOLT_CTRL_Pin, SYNC_DAC_ULTRAVOLT_CTRL_GPIO_Port, SPI1,
-				  UVA_OFFSET, UVA_GAIN, UVB_OFFSET, UVB_GAIN, verbose, "DAC_UV", "A", "B");
+				  UVA_OFFSET, UVA_GAIN, UVB_OFFSET, UVB_GAIN, verbose, "DAC_UV", "A", "B");*/
 
 	struct max6225_device vref = init_max6225(verbose);
 
@@ -211,7 +211,7 @@ int main(void)
 			{
 				if (strcmp(cmd.object, adc_slow_hv1_fb.name) == 0)
 					cont_conversion(&adc_slow_hv1_fb, verbose, (uint8_t)cmd.value);
-				else {/*no other devices with variable speed*/}
+				else {} //no other devices with variable speed
 			}
 			else if (strcmp(cmd.type, "setVoltage") == 0)
 			{
@@ -237,6 +237,7 @@ int main(void)
 		{
 			read_max11270(&adc_slow_hv1_fb, &vref, verbose);
 			updateDecelReadingSlow(&decel_board, &adc_slow_hv1_fb, verbose);
+			printfloat(adc_slow_hv1_fb.result_bits, 1);
 			printfloat(adc_slow_hv1_fb.result_uV, 1);
 			printfloat(adc_fast_hv1_fb.result_bits, 1);
 			printfloat(adc_fast_hv1_fb.result_uV, 1);
@@ -249,14 +250,14 @@ int main(void)
 			updateDecelReadingFast(&decel_board, &adc_fast_hv1_fb, verbose);
 		}
 
-		// updates DAC values, should check if necesarry first though
+		/*// updates DAC values, should check if necesarry first though
 		if (decel_board.hv_enable == 1)
 		{
 			set_stage_uV(&dac_hv1, 1, 0, 1); 		// sets dac_coarse to 1V
 			set_stage_uV(&dac_hv1, 2, 0, 1); 		// sets dac_fine to 1V
 			set_stage_uV(&dac_ultravolt, 1, 0, 1); 	// sets ultravolt A input to 0V
 			set_stage_uV(&dac_ultravolt, 2, 0, 1); 	// sets ultravolt B input to 0V
-		}
+		}*/
 
 		// heartbeat
 		if (HAL_GetTick() - lastTick > 500)

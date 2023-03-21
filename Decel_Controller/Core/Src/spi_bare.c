@@ -15,6 +15,7 @@
 
 #include "spi_bare.h"
 #include "main.h"
+#include "misc_funcs.h"
 
 /************** STEPS TO FOLLOW *****************
 1. Enable SPI clock
@@ -27,43 +28,50 @@ void SPIConfig(void)
 	RCC->APB2ENR |= (1<<12);  		// Enable SPI1 CLock, max 84MHz
 	RCC->APB1ENR |= (1<<14);  		// Enable SPI2 Clock, max 42MHz
 
-	SPI1->CR1 |= (1<<2);  			// Set SPI to Master Mode
-	SPI1->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
-	SPI1->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
-	SPI1->CR1 &= ~(1<<10);  		// RXONLY = 0, full-duplex
-	SPI1->CR1 &= ~(1<<11);  		// DFF=0, 8 bit data
-	SPI1->CR2 = 0;					// CR2 is used during SPI operation
-
-	SPI2->CR1 |= (1<<2);  			// Set SPI to Master Mode
-	SPI2->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
-	SPI2->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
-	SPI2->CR1 &= ~(1<<10);  		// RXONLY = 0, full-duplex
-	SPI2->CR1 &= ~(1<<11);  		// DFF=0, 8 bit data
-	SPI2->CR2 = 0;					// CR2 is used during SPI operation
-
 	SPIMode(SPI1, 3);				// Default to Mode 3
-	SPISpeed(SPI1, 50000000);		// Default to 50MHz
 	SPIMode(SPI2, 3);				// Default to Mode 3
-	SPISpeed(SPI2, 50000000);		// Default to 50MHz
+
+	SPI1->CR1 |= (1<<2);  			// Set SPI to Master Mode
+	SPI2->CR1 |= (1<<2);  			// Set SPI to Master Mode
+
+	SPISpeed(SPI1, 10000000);		// Default to 10MHz
+	SPISpeed(SPI2, 10000000);		// Default to 10MHz
+
+	SPI1->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
+	SPI2->CR1 &= ~(1<<7);  			// LSBFIRST = 0, MSB first
+
+	SPI1->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
+	SPI2->CR1 |= (1<<8) | (1<<9);  	// SSM=1, SSi=1 -> Software Slave Management
+
+	SPI1->CR1 &= ~(1<<10);  		// RXONLY = 0, full-duplex
+	SPI2->CR1 &= ~(1<<10);  		// RXONLY = 0, full-duplex
+
+	SPI1->CR1 &= ~(1<<11);  		// DFF=0, 8 bit data
+	SPI2->CR1 &= ~(1<<11);  		// DFF=0, 8 bit data
+
+	SPI1->CR2 = 0;					// CR2 is used during SPI operation
+	SPI2->CR2 = 0;					// CR2 is used during SPI operation
 }
 
 // Ensures GPIO pins PB3..5 are set up for SPI1 and PB13..15 for SPI2
 void GPIOConfigSPI(void)
 {
-	RCC->AHB1ENR |= (1<<0);  					// Enable GPIO Clock
+	RCC->AHB1ENR   |= (1<<0);  					 // Enable GPIO Clock
 
 	// Setting up pins for SPI1 on PB3..5
-	GPIOB->OSPEEDR |= (3<<6)|(3<<8)|(3<<10);  	// Very High Speed for PB3, PB4, PB5
-	GPIOB->MODER |= (2<<6)|(2<<8)|(2<<10);  	// Alternate function mode for PB3, PB4, PB5
-	GPIOB->AFR[0] |= (5<<12)|(5<<16)|(5<<20); 	// AF5 (SPI1) for PB3, PB4, PB5
+	GPIOB->MODER   |=  (2<<6)|(2<<8)|(2<<10);  	 // Alternate function mode for PB3, PB4, PB5
+	GPIOB->OSPEEDR |=  (1<<6)|(1<<10);  		 // Medium Speed for PB3, PB5 (SCLK and MOSI)
+	GPIOB->OSPEEDR &= ~((1<<7)|(1<<11));  		 // Medium Speed for PB3, PB5 (SCLK and MOSI)
+	GPIOB->AFR[0]  |=  (5<<12)|(5<<16)|(5<<20);  // AF5 (SPI1) for PB3, PB4, PB5
 
 	// Setting up pins for SPI2 on PB13..15
-	GPIOB->OSPEEDR |= (3<<26)|(3<<28)|(3<<30);  // Very High Speed for PB13, PB14, PB15
-	GPIOB->MODER |= (2<<26)|(2<<28)|(2<<30);  	// Alternate function mode for PB13, PB14, PB15
-	GPIOB->AFR[1] |= (5<<20)|(5<<24)|(5<<28); 	// AF5 (SPI2) for PB13, PB14, PB15
+	GPIOB->MODER   |=  (2<<26)|(2<<28)|(2<<30);  // Alternate function mode for PB13, PB14, PB15
+	GPIOB->OSPEEDR |=  (1<<26)|(1<<30);  		 // Medium Speed for PB13, PB15 (SCLK and MOSI)
+	GPIOB->OSPEEDR &= ~((1<<27)|(1<<31));  		 // Medium Speed for PB3, PB5 (SCLK and MOSI)
+	GPIOB->AFR[1]  |=  (5<<20)|(5<<24)|(5<<28);  // AF5 (SPI2) for PB13, PB14, PB15
 }
 
-// Determines and set CPHA and CPOL for mode (0,1,2 or 3)
+// Determines and sets CPHA and CPOL for mode (0,1,2 or 3)
 void SPIMode(SPI_TypeDef *spi, uint8_t mode)
 {
 	mode &= 0x3;
@@ -82,7 +90,7 @@ void SPISpeed(SPI_TypeDef *spi, uint32_t max_freq)
 
 	// available SPI speeds are clk/2, clk/4, clk/8 etc...
 	uint8_t br_div = 0;
-	while (((clk << (br_div + 1)) > max_freq) && (br_div < 8))
+	while (((clk >> (br_div + 1)) > max_freq) && (br_div < 8))
 	{
 		br_div += 1;
 	}
@@ -94,7 +102,8 @@ void SPISpeed(SPI_TypeDef *spi, uint32_t max_freq)
 
 void SPIBRDiv(SPI_TypeDef *spi, uint8_t br_div)
 {
-	spi->CR1 |= ((br_div & 0x07) << 3);
+	spi->CR1 |= ((br_div & 7) << 3);
+	spi->CR1 &= ~((~br_div & 7) << 3);
 }
 
 void SPI_Enable (SPI_TypeDef *spi)

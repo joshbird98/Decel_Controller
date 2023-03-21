@@ -15,9 +15,11 @@
 struct max11270_device {
   char name[40];
   uint16_t cs_pin;
+  uint16_t cs_pin_num;
   GPIO_TypeDef* cs_port;
   uint16_t rdy_pin;
   GPIO_TypeDef* rdy_port;
+  uint16_t rdy_pin_num;
   SPI_TypeDef * spi_handle;
   uint32_t result_bits;
   float result_uV;

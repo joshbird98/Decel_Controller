@@ -249,3 +249,14 @@ void print_binary(uint8_t val)
 	println(str);
 }
 
+uint16_t mylog2(uint16_t val)
+{
+    uint16_t i = 0;
+    while (val > 1)
+    {
+        val = val / 2;
+        i += 1;
+    }
+    return i;
+}
+

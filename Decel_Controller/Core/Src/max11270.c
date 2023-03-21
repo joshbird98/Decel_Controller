@@ -31,8 +31,10 @@ struct max11270_device init_max11270(uint16_t cs_pin, GPIO_TypeDef* cs_port,
 		println(adc.name);
 	}
     adc.cs_pin = cs_pin;
+    adc.cs_pin_num = mylog2(cs_pin);
     adc.cs_port = cs_port;
     adc.rdy_pin = rdy_pin;
+    adc.rdy_pin_num = mylog2(rdy_pin);
     adc.rdy_port = rdy_port;
     adc.spi_handle = spi_handle;
     adc.result_bits = 0;
@@ -40,6 +42,40 @@ struct max11270_device init_max11270(uint16_t cs_pin, GPIO_TypeDef* cs_port,
     adc.fault = 0;
     if (speed > 0x0F) speed = 0x0F;
     adc.speed = speed;
+
+	//ensure CS port is active
+	if (adc.cs_port == GPIOA) RCC->AHB1ENR |= (1<<0);  // Enable the GPIOA clock
+	if (adc.cs_port == GPIOB) RCC->AHB1ENR |= (1<<1);  // Enable the GPIOB clock
+	if (adc.cs_port == GPIOC) RCC->AHB1ENR |= (1<<2);  // Enable the GPIOC clock
+	if (adc.cs_port == GPIOD) RCC->AHB1ENR |= (1<<3);  // Enable the GPIOD clock
+	if (adc.cs_port == GPIOE) RCC->AHB1ENR |= (1<<4);  // Enable the GPIOE clock
+	if (adc.cs_port == GPIOF) RCC->AHB1ENR |= (1<<5);  // Enable the GPIOF clock
+	if (adc.cs_port == GPIOG) RCC->AHB1ENR |= (1<<6);  // Enable the GPIOG clock
+	if (adc.cs_port == GPIOH) RCC->AHB1ENR |= (1<<7);  // Enable the GPIOH clock
+
+	// ensuring CS pin is very-high speed push-pull output, with no-pulldown
+	adc.cs_port->MODER 	 |=  (1<<(adc.cs_pin_num << 1)); 	// Output mode for CS pin
+	adc.cs_port->OTYPER  &= ~(1<<(adc.cs_pin_num));		    // Push-pull mode for CS pin
+	adc.cs_port->OSPEEDR |=  ((0<<(adc.cs_pin_num << 1)) | (0<<((adc.cs_pin_num << 1)+1)));    // Low Speed for CS pin
+	adc.cs_port->PUPDR   &= ~((1<<(adc.cs_pin_num << 1)) | (1<<((adc.cs_pin_num << 1)+1)));  // No pullup or pulldown for CS pin
+	adc.cs_port->BSRR    |= (1<<(adc.cs_pin_num)); 			// Resets CS HIGH
+	for (uint8_t i = 0; i < 100; i++) asm("NOP");				// Delay to ensure CS high meets timing requirements
+
+	//ensure RDY port is active
+	if (adc.rdy_port == GPIOA) RCC->AHB1ENR |= (1<<0);  // Enable the GPIOA clock
+	if (adc.rdy_port == GPIOB) RCC->AHB1ENR |= (1<<1);  // Enable the GPIOB clock
+	if (adc.rdy_port == GPIOC) RCC->AHB1ENR |= (1<<2);  // Enable the GPIOC clock
+	if (adc.rdy_port == GPIOD) RCC->AHB1ENR |= (1<<3);  // Enable the GPIOD clock
+	if (adc.rdy_port == GPIOE) RCC->AHB1ENR |= (1<<4);  // Enable the GPIOE clock
+	if (adc.rdy_port == GPIOF) RCC->AHB1ENR |= (1<<5);  // Enable the GPIOF clock
+	if (adc.rdy_port == GPIOG) RCC->AHB1ENR |= (1<<6);  // Enable the GPIOG clock
+	if (adc.rdy_port == GPIOH) RCC->AHB1ENR |= (1<<7);  // Enable the GPIOH clock
+
+	// ensuring RDY pin is input, with no-pulldown
+	adc.rdy_port->MODER   &= ~((1<<(adc.rdy_pin_num << 1)) | (1<<((adc.rdy_pin_num << 1)+1))); 	// Input mode for RDY pin
+	adc.rdy_port->PUPDR   &= ~((1<<(adc.rdy_pin_num << 1)) | (1<<((adc.rdy_pin_num << 1)+1)));  // No pullup or pulldown for CS pin
+	for (uint8_t i = 0; i < 100; i++) asm("NOP");				// Delay to ensure CS high meets timing requirements
+
 
 	// check that device responds, ie read STAT register
 	uint16_t status = stat_max11270(&adc, verbose);
@@ -75,9 +111,9 @@ void calibrate_max11270(struct max11270_device *adc, uint8_t verbose)
 	setupSPIMAX11270(adc);
 
 	// Inititate SPI transfer
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 					// set CS LOW
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num))<<16; 				// set CS LOW
 	SPI_Transmit((uint8_t *)&MAX11270_CAL, 1, adc->spi_handle);		// transmit 1 byte to request calibration
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 					// reset CS HIGH
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num)); 					// reset CS HIGH
 
 	returnSPIMAX11270(adc);
 
@@ -103,10 +139,10 @@ void read_max11270(struct max11270_device *adc, struct max6225_device *vref, uin
 	setupSPIMAX11270(adc);
 
 	// Inititate SPI transfer
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num))<<16; 						// set CS LOW
 	SPI_Transmit((uint8_t *)&MAX11270_READ_DATA, 1, adc->spi_handle);	// transmit 1 byte to request data read
 	SPI_Receive (ADC_buffer, 3, adc->spi_handle);						// receive 3 bytes of data
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num)); 						// reset CS HIGH
 
 	returnSPIMAX11270(adc);
 
@@ -142,18 +178,19 @@ void setup_max11270(struct max11270_device *adc, uint8_t verbose)
 	tx_data[1] = 0b00001101;											// desired contents of CTRL1 reg
 
 	// Inititate SPI transfer
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num))<<16; 					// set CS LOW
 	SPI_Transmit(tx_data, 2, adc->spi_handle);							// transmit 2 bytes to write CTRL1 reg
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num)); 						// reset CS HIGH
 
 	// Prep readback from CTRL1 register, to check if correct
 	uint8_t CTRL1_reg[1] = {0};
+	for(uint8_t i = 0; i < 100; i++) asm("NOP");
 
 	// Inititate SPI transfer
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 							// set CS LOW
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num))<<16; 						// set CS LOW
 	SPI_Transmit((uint8_t *)&MAX11270_REG_CTRL1_READ, 1, adc->spi_handle);	// transmit 1 byte to request ctrl1 read
 	SPI_Receive (CTRL1_reg, 1, adc->spi_handle);							// receive 1 byte of data
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 							// reset CS HIGH
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num)); 							// reset CS HIGH
 
 	returnSPIMAX11270(adc);
 
@@ -190,10 +227,10 @@ uint16_t stat_max11270(struct max11270_device *adc, uint8_t verbose)
 	uint8_t STAT_reg[2] = {0, 0};
 
 	// Inititate SPI transfer
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num))<<16; 					// set CS LOW
 	SPI_Transmit((uint8_t *)&MAX11270_REG_READ, 1, adc->spi_handle);	// transmit 1 byte to request data read
 	SPI_Receive (STAT_reg, 2, adc->spi_handle);							// receive 2 bytes of data
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num)); 						// reset CS HIGH
 
 	returnSPIMAX11270(adc);
 
@@ -219,7 +256,7 @@ uint16_t stat_max11270(struct max11270_device *adc, uint8_t verbose)
 
 uint8_t check_available_max11270(struct max11270_device *adc)
 {
-	return !((adc->rdy_port->IDR) &(1<<adc->rdy_pin));
+	return !((adc->rdy_port->IDR) &(1<<adc->rdy_pin_num));
 }
 
 
@@ -236,9 +273,9 @@ void cont_conversion(struct max11270_device *adc, uint8_t verbose, uint8_t speed
 	uint8_t value[1] = {(0B10000000 | (adc->speed & 15))};
 
 	// Inititate SPI transfer
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// set CS LOW
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num))<<16; 						// set CS LOW
 	SPI_Transmit(value, 1, adc->spi_handle);							// transmit 1 byte to start conversions
-	adc->cs_port->BSRR |= (1<<(adc->cs_pin))<<16; 						// reset CS HIGH
+	adc->cs_port->BSRR |= (1<<(adc->cs_pin_num)); 						// reset CS HIGH
 
 	returnSPIMAX11270(adc);
 
@@ -254,15 +291,13 @@ void cont_conversion(struct max11270_device *adc, uint8_t verbose, uint8_t speed
 void setupSPIMAX11270(struct max11270_device *adc)
 {
 	// Setup SPI for this device, ie slow and Mode 0
-	adc->spi_handle->CR1 |= (0<<0)|(0<<1);							// set SPI Mode to 0
-	if (adc->spi_handle == SPI1) adc->spi_handle->CR1 |= (4<<3);	// slow clock down
-	if (adc->spi_handle == SPI2) adc->spi_handle->CR1 |= (3<<3);
+	SPIMode(adc->spi_handle, 0);
+	SPISpeed(adc->spi_handle, 1000000); //1MHz
 }
 
 void returnSPIMAX11270(struct max11270_device *adc)
 {
 	// Return SPI to fast and mode 3
-	adc->spi_handle->CR1 |= (1<<0)|(1<<1);							// return SPI Mode to 3
-	if (adc->spi_handle == SPI1) adc->spi_handle->CR1 |= (0<<3); 	// return SPI clock to fast
-	if (adc->spi_handle == SPI2) adc->spi_handle->CR1 |= (0<<3);
+	SPIMode(adc->spi_handle, 3);
+	SPISpeed(adc->spi_handle, 10000000); //10MHz
 }

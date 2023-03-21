@@ -17,6 +17,7 @@
 struct mcp33131_device {
   char name[20];
   uint16_t cs_pin;
+  uint16_t cs_pin_num;
   GPIO_TypeDef* cs_port;
   uint16_t sdo_pin;
   GPIO_TypeDef* sdo_port;

@@ -71,14 +71,14 @@ void updateDecelReadingSlow(struct board *decel_board, struct max11270_device *a
 void updateDecelReadingFast(struct board *decel_board, struct mcp33131_device *adc, uint8_t verbose)
 {
 	decel_board->decel_voltage_fast = (adc->result_uV / 1000000.0) * (decel_board->divider.ratio + 1);
-		if (verbose > 0)
-		{
-			print("ADC measures ");
-			printfloat(adc->result_uV / 1000000.0, 0);
-			print("[V]\n\rDivider ratio: ");
-			printfloat(decel_board->divider.ratio, 1);
-			print("Decel Voltage is ");
-			printfloat(decel_board->decel_voltage_fast, 0);
-			println("V");
-		}
+	if (verbose > 0)
+	{
+		print("ADC measures ");
+		printfloat(adc->result_uV / 1000000.0, 0);
+		print("[V]\n\rDivider ratio: ");
+		printfloat(decel_board->divider.ratio, 1);
+		print("Decel Voltage is ");
+		printfloat(decel_board->decel_voltage_fast, 0);
+		println("V");
+	}
 }

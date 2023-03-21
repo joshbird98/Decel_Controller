@@ -49,6 +49,8 @@ void splash_message(uint8_t verbose);
 void set_leds(uint8_t led_1_state, uint8_t led_2_state, uint8_t led_3_state);
 void led_twinkle(uint8_t repeats);
 void print_binary(uint8_t val);
+uint16_t mylog2(uint16_t val);
+
 
 struct command handle_data(char data[], uint8_t verbose);
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
